@@ -1,14 +1,14 @@
 """
 CSF tools for Python 3+
 
-Check out the article about CSF: https://modenc.renegadeprojects.com/CSF_File_Format
+Check out the article about CSF for more info: https://modenc.renegadeprojects.com/CSF_File_Format
 """
 
 from pathlib import Path
 from io import BufferedReader
 from struct import unpack, pack
 from json import dump, load
-from os import remove
+from os import remove as remove_file
 
 DEFAULT_PATH = Path("generals.csf")
 
@@ -123,45 +123,42 @@ class CSF:
 
     def load_from_json(self, load_path: Path = Path("generals.json"), outpath: Path = Path("generals.csf")) -> None:
         with open(load_path, "r") as r:
-            json_csf = load(r)
+            json_csf: dict[str, dict[str, dict[str, str]]] = load(r)
 
         with open(outpath, "wb") as w:
 
+            metadata = json_csf["METADATA"]
+
             w.write(
                 pack("<4s", b"\x20\x46\x53\x43") +  # FSC, file marker
-                pack("<I", self.__ver) +         # Ver, useless
-                pack("<I", self.__numl) +        # NumL, number of lables
-                pack("<I", self.__nums) +        # NumS, number of strings
+                pack("<I", metadata["Ver"]) +       # Ver, useless
+                pack("<I", metadata["NumL"]) +      # NumL, number of labels
+                pack("<I", metadata["NumS"]) +      # NumS, number of strings
                 pack("<I", 0) +                     # null, useless
-                pack("<I", self.__lang)          # Lang, useless
+                pack("<I", metadata["Lang"])        # Lang, useless
             )
 
             try:
                 for key, values in json_csf["LABEL"].items():
                     pairs = 1 if values["STR"] else 0
                     NumP = pack("<I", pairs)
-                    L = bytes(b ^ 0xFF for b in key.encode("utf-16le"))
-                    line: bytes = pack("<4s", b"\x20\x4c\x42\x4c") + NumP + pack("<I", len(key)) + pack("<4s", L)
+                    L = key.encode("utf-8")
+                    line: bytes = pack("<4s", b"\x20\x4c\x42\x4c") + NumP + pack("<I", len(L)) + L
 
                     if pairs:
                         S_TYPE = b"\x20\x52\x54\x53" if "EXTRA" not in values else b"\x57\x52\x54\x53"
                         S = bytes(b ^ 0xFF for b in values["STR"].encode("utf-16le"))
-                        line += pack("<4s", S_TYPE) + pack("<I", len(values["STR"])) + pack("<4s", S)
+                        line += pack("<4s", S_TYPE) + pack("<I", len(S) // 2) + S
 
                         if S_TYPE == b"\x57\x52\x54\x53":
-                            X = bytes(b ^ 0xFF for b in values["EXTRA"].encode("utf-16le"))
-                            line += pack("<I", len(values["EXTRA"])) + pack("<4s", X)
+                            X = values["EXTRA"].encode("ascii")
+                            line += pack("<I", len(X)) + X
 
-                w.write(line)
+                    w.write(line)
 
             except Exception as e:
                 print(e.args[0])
-                remove(outpath)
+                remove_file(outpath)
                 return
 
         self.update(outpath)
-
-
-c = CSF()
-c.dump_to_json()
-# c.load_from_json(outpath = Path("t.csf"))
