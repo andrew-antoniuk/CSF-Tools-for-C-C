@@ -1,5 +1,5 @@
 """
-CSF tools for Python 3+
+CSF tools for Python 3.13+
 
 Check out the article about CSF for more info: https://modenc.renegadeprojects.com/CSF_File_Format
 """
@@ -13,6 +13,37 @@ from os import remove as remove_file
 DEFAULT_PATH = Path("generals.csf")
 
 class CSF:
+
+    """
+    CSF file structure:
+
+    |  FCS | Ver  | NumL | NumS | null | Lang
+
+    |  LBL | NumP | LenL |      L      |
+    |  RTS | LenS |      S      |
+    | WRTS | LenS |      S      | LenX |  X   |
+
+
+    FSC - CSF header b" FSC" identifier & file format signature.
+    By the way FCS means CSF in reversed order.
+
+    Ver - CSF version. Useless
+
+    NumL - number of labels in this CSF AKA keys of descriptions.
+
+    NumS - number of strings in this CSF. Mostly the same as NumL.
+
+    null - placeholder. Useless
+
+    Lang - language of this CSF. See available languages below. Useless
+    """
+
+    __languages = {
+        0: "English/US",
+        1: "English/UK",
+        # need to add other languages
+        # unfortunately the webpage of the article is not responding at this moment
+    }
 
     def __init__(self, filepath: Path = DEFAULT_PATH) -> None:
         self.update(filepath)
@@ -33,17 +64,17 @@ class CSF:
         with open(filepath, "rb") as f:
             header = f.read(24)
 
-        SIGN, Ver, NumL, NumS, _, Lang = unpack("<4sIIIII", header)
+        HEX, Ver, NumL, NumS, _, Lang = unpack("<4sIIIII", header)
 
-        if SIGN != b" FSC":
+        if HEX != b" FSC":
             raise ValueError("Incorrect file format")
 
         return Ver, NumL, NumS, Lang
 
-    def current_path(self) -> str:
+    def get_current_path(self) -> str:
         return str(self.__file)
 
-    def metadata(self) -> tuple[int, int, int, int]:
+    def get_metadata(self) -> tuple[int, int, int, int]:
 
         """
         Get 4-tuple consisting of:
@@ -58,9 +89,6 @@ class CSF:
 
         return self.__ver, self.__numl, self.__nums, self.__lang
 
-    def write_to_markdown(self) -> None:
-        pass
-
     def dump_to_json(self, dump_path: Path = Path("generals.json"), indentation: int = 4) -> None:
 
         self.update(self.__file)
@@ -73,7 +101,6 @@ class CSF:
             return data.decode("utf-16-le")
 
         json_csf = {
-
             "METADATA": {
                 "Ver": self.__ver,
                 "NumL": self.__numl,
@@ -81,10 +108,7 @@ class CSF:
                 "Lang": self.__lang
             },
 
-            "LABEL": {
-
-            }
-
+            "LABEL": {}
         }
 
         with open(self.__file, "rb") as r:
@@ -117,6 +141,7 @@ class CSF:
                     print(f"Error: {e.args[0]}")
                     print(F"Iteration: {i}")
                     print(L, S, X if S_TYPE == b"WRTS" else "")
+                    return
 
         with open(dump_path, "w", encoding = "utf-8") as w:
             dump(json_csf, w, indent = indentation)
@@ -162,3 +187,14 @@ class CSF:
                 return
 
         self.update(outpath)
+
+    def write_to_markdown(self) -> None:
+        pass
+
+    def __repr__(self):
+        return (
+            f"CSF Version: {self.__ver}\n"
+            f"Number of Lines: {self.__numl}\n"
+            f"Number of Strings: {self.__nums}\n"
+            f"Language: {self.__lang, self.__languages[self.__lang]}"
+        )
